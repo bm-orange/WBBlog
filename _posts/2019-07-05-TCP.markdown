@@ -20,7 +20,7 @@ TCP为传输层协议，为了保证数据在网络中的可靠传输。
 
 `TCP segment = TCP header + Data chunk`
 
-![TCP-Header-Format.png](/assets/img/tcp/TCP-Header-Format.png)
+![TCP-Header-Format.png](./assets/img/tcp/TCP-Header-Format.png)
 
 [图片来源](
 https://www.gatevidyalay.com/transmission-control-protocol-tcp-header/)
@@ -54,7 +54,7 @@ https://www.gatevidyalay.com/transmission-control-protocol-tcp-header/)
 
 ## TCP建立连接
 
-![3-way-handshake.jpg](/assets/img/tcp/3-way-handshake.jpg)
+![3-way-handshake.jpg](./assets/img/tcp/3-way-handshake.jpg)
 
 1. 客户端发送一个建立连接的请求，请求只有TCP首部，没有数据，请求segment的同步标志位被设置为1，初始化一个序列号x，并且请求段中还指明了最大段大小(Maximum segment size)与接收窗口大小(receiving window size),客户端发出请求后，由`closed`状态转为`syn-sent`状态。
 2. 在收到请求segment后，服务端向客户端发出响应，返回一个ack segment，这个segment向客户端说明了服务端的相关参数，这个数据segment包含了syn同步标志、初始的序列号`y`，最大段大小、接收窗口大小、ack确认号(请求数据的序列号+1)，ACK确认标志设置为1；服务端在返回确认后，状态由`listen`转为`syn-rcvd`
@@ -72,19 +72,19 @@ https://www.gatevidyalay.com/transmission-control-protocol-tcp-header/)
 
 #### 数据包丢失
 
-![Problem-of-Lost-Data-Stop-and-Wait-ARQ.png](/assets/img/tcp/Problem-of-Lost-Data-Stop-and-Wait-ARQ.png)
+![Problem-of-Lost-Data-Stop-and-Wait-ARQ.png](./assets/img/tcp/Problem-of-Lost-Data-Stop-and-Wait-ARQ.png)
 
 在每次发送数据后，发送方都会启动一个计时器，如果数据在传输过程中丢失，那么在计时器到期后，仍然不能收到确认，发送方将重新传输数据包。
 
 #### 确认丢失
 
-![Problem-of-Lost-Acknowledgement-Stop-and-Wait-ARQ-1.png](/assets/img/tcp/Problem-of-Lost-Acknowledgement-Stop-and-Wait-ARQ-1.png)
+![Problem-of-Lost-Acknowledgement-Stop-and-Wait-ARQ-1.png](./assets/img/tcp/Problem-of-Lost-Acknowledgement-Stop-and-Wait-ARQ-1.png)
 
 如果接收方正常收到数据，返回确认，但是确认在返回的过程中丢失，那么发送方在计时器到期后因不能收到确认，而重传数据包，接收方收到重复数据后，丢弃，并再次返回确认。
 
 #### 延迟确认
 
-![Problem-of-delayed-Acknowledgement-Stop-and-Wait-ARQ-1.png](/assets/img/tcp/Problem-of-delayed-Acknowledgement-Stop-and-Wait-ARQ-1.png)
+![Problem-of-delayed-Acknowledgement-Stop-and-Wait-ARQ-1.png](./assets/img/tcp/Problem-of-delayed-Acknowledgement-Stop-and-Wait-ARQ-1.png)
 
 发送方因为确认延迟，计时器到期而重传数据，发送方将收到重复的确认，当收到重复确认时，丢弃。
 
@@ -118,7 +118,7 @@ https://www.gatevidyalay.com/transmission-control-protocol-tcp-header/)
 
 ## TCP的拥塞控制
 
-![congestion-control.jpg](/assets/img/tcp/congestion-control.jpg)
+![congestion-control.jpg](./assets/img/tcp/congestion-control.jpg)
 
 ### 慢开始
 
@@ -137,7 +137,7 @@ https://www.gatevidyalay.com/transmission-control-protocol-tcp-header/)
 
 ## TCP关闭连接
 
-![connection-termination.png](/assets/img/tcp/connection-termination.png)
+![connection-termination.png](./assets/img/tcp/connection-termination.png)
 
 1. 客户端发送FIN段，告知服务端自己将关闭连接，客户端进入`FIN-WAIT-1`状态，并等待服务端的确认。
 2. 服务端收到FIN请求后，服务端释放缓存，并返回一个确认，服务端进入`CLOSE-WAIT`状态。 客户端收到确认后，进入`FIN-WAIT-2`状态，此时从客户端到服务端的连接终止，客户端不能发送数据到服务端，因为缓存已经释放，但是客户端仍然可以发送不带数据的确认，从服务端到客户端的连接仍然open，服务端可以继续发送数据。
@@ -147,9 +147,9 @@ https://www.gatevidyalay.com/transmission-control-protocol-tcp-header/)
 
 ## 参考
 
-+ [TCP Header | TCP Header Format | TCP Flags](https://www.gatevidyalay.com/transmission-control-protocol-tcp-header/)
-+ [TCP Sequence Number | Wrap Around Time](https://www.gatevidyalay.com/tcp-sequence-number-wrap-around-concept/)
-+ [3 Way Handshake | TCP Connection](https://www.gatevidyalay.com/three-way-handshake-tcp-connection-establishment/)
-+ [Stop and Wait ARQ | Sliding Window Protocols](https://www.gatevidyalay.com/stop-and-wait-arq-sliding-window-protocols/)
-+ [Go back N | Sliding Window Protocol](https://www.gatevidyalay.com/go-back-n-sliding-window-protocol/)
-+ [TCP流量控制与拥塞控制](https://andrewpqc.github.io/2018/07/21/tcp-flow-control-and-congestion-control/)
+[TCP Header | TCP Header Format | TCP Flags](https://www.gatevidyalay.com/transmission-control-protocol-tcp-header/)<br>
+[TCP Sequence Number | Wrap Around Time](https://www.gatevidyalay.com/tcp-sequence-number-wrap-around-concept/)<br>
+[3 Way Handshake | TCP Connection](https://www.gatevidyalay.com/three-way-handshake-tcp-connection-establishment/)<br>
+[Stop and Wait ARQ | Sliding Window Protocols](https://www.gatevidyalay.com/stop-and-wait-arq-sliding-window-protocols/)<br>
+[Go back N | Sliding Window Protocol](https://www.gatevidyalay.com/go-back-n-sliding-window-protocol/)<br>
+[TCP流量控制与拥塞控制](https://andrewpqc.github.io/2018/07/21/tcp-flow-control-and-congestion-control/)<br>
