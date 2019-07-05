@@ -54,7 +54,7 @@ https://www.gatevidyalay.com/transmission-control-protocol-tcp-header/)
 
 ## TCP建立连接
 
-<center><img alt="3-way-handshake" src="/WBBlog/assets/img/tcp/3-way-handshake.jpg"/><center>
+![3-way-handshake](/WBBlog/assets/img/tcp/3-way-handshake.jpg)
 
 1. 客户端发送一个建立连接的请求，请求只有TCP首部，没有数据，请求segment的同步标志位被设置为1，初始化一个序列号x，并且请求段中还指明了最大段大小(Maximum segment size)与接收窗口大小(receiving window size),客户端发出请求后，由`closed`状态转为`syn-sent`状态。
 2. 在收到请求segment后，服务端向客户端发出响应，返回一个ack segment，这个segment向客户端说明了服务端的相关参数，这个数据segment包含了syn同步标志、初始的序列号`y`，最大段大小、接收窗口大小、ack确认号(请求数据的序列号+1)，ACK确认标志设置为1；服务端在返回确认后，状态由`listen`转为`syn-rcvd`
