@@ -38,16 +38,8 @@ plainwhite:
     twitter: thelehhman
     github:  didiaoMan
     linkedIn: in/thelehhman # format: locale/username
-collections:
-  categories:
-    output: true
 
 defaults:
-  - scope:
-      path: ""
-      type: "categories"
-    values:
-      layout: "category"
   - scope:
       path: ""
       type: "posts"
