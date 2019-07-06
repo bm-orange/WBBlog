@@ -15,14 +15,6 @@
 				<!--<a href="https://twitter.com/{{ site.plainwhite.social_links.twitter }}"><li><i class="icon-twitter-squared"></i></li></a>-->
 			</ul>
 			<p>&copy; 2019</p>
-                        <h2 style="margin-bottom: 15px;">Categories</h2>
-                        <ul class="post-categories">
-                          {%- for category in site.categories -%}
-                            <li>
-                               <a href="{{ category.url }}"> {{ category.name }} </a>
-                            </li>
-                          {%- endfor -%}
-                        </ul>
 		</section>
 		<section class="content">
 			{{ content }}
