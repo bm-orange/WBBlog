@@ -1,0 +1,438 @@
+---
+layout: post
+title: 'HashMap分析'
+date: 2019-07-08 10:06
+categories: Java
+---
+
+HashMap实现了Map接口的所有可选操作，它大致等价Hashtable，只是HashMap不是同步的，而且允许`null`值和`null`键。它不能保证map的顺序。
+
+HashMap的基本操作`get`和`put`提供了常量级的时间性能。迭代HashMap的性能与`buckets`桶数量和它的大小成正比，因此如果迭代性能很重要，不要将容量设置的太高，负载因子设置的太低。
+
+`initial capacity`和`load factor`是影响HashMap性能的两个参数。`capacity`是hash表的桶数，`load factor`是hash表在自动扩容前，可以允许有多满。当hash表的条目数超过负载因子和当前容量的乘积时，hash表将扩容为当前容量的两倍，并且重新hash内部结构。在设置map的初始容量时，应该考虑可能的条目数和负载因子，减少`rehash`操作次数。
+
+## 常量说明
+
++ `static final int DEFAULT_INITIAL_CAPACITY = 1 << 4;` 缺省的hash表容量
++ `static final int MAXIMUM_CAPACITY = 1 << 30;` 最大hash表容量
++ `static final float DEFAULT_LOAD_FACTOR = 0.75f` 缺省的负载因子
++ `static final int TREEIFY_THRESHOLD = 8` 从链表转为红黑树的阈值
+
+**注：**源码中有分析，使用随机的hashcode，箱子中节点的频率(链表长度)符合泊松分布,计算得出链表长度为8的概率为`0.00000006`.更多的链表长度概率小于千万分之1，即在较好的hash函数情况下，使用到红黑树的概率也非常小。
+
++ `static final int UNTREEIFY_THRESHOLD = 6`红黑树转回链表的阈值
++ `static final int MIN_TREEIFY_CAPACITY = 64;`箱(bins)可能被树化的最小表容量，否则如果在一个bin中有太多节点时，表将`resize`扩容
+
+### hash值的计算
+
+计算对象的hashcode的高16位与低16位相与的值，将高位冲突向下传播
+
+```java
+static final int hash(Object key) {   
+    int h;   
+    return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
+}
+```
+
+### 保证容量是2的幂
+
+```java
+// 如果保证得出的值为2的幂???
+static final int tableSizeFor(int cap) {
+    int n = cap - 1;
+    n |= n >>> 1;
+    n |= n >>> 2;
+    n |= n >>> 4;
+    n |= n >>> 8;
+    n |= n >>> 16;
+return (n < 0) ? 1 : (n >= MAXIMUM_CAPACITY) ? MAXIMUM_CAPACITY : n + 
+1;
+}
+```
+
+保证计算得到的表容量都是满足是2的幂的(为什么这样要求???)
+
+### 字段说明
+
++ `transient Node<K,V>[] table;`hash表，在首次使用时初始化，必要时进行扩容`resize`，分配时表长度总是2的幂
++ `transient Set<Map.Entry<K,V>> entrySet;` 缓存`entrySet()`结果
++ `transient int size;` 键值映射的数量
++ `transient int modCount;`HashMap在结构上被修改的次数，结构修改指映射数量的改变，表内部结构的改变(如rehash)，用于fail-fast**???**
++ `int threshold;`下一次需要扩容的大小，`capacity * load factor`
++ `final float loadFactor;`hashmap的负载因子
+
+## 基本操作
+
+### get
+
+```java
+public V get(Object key) {
+    Node<K,V> e;
+    return (e = getNode(hash(key), key)) == null ? null : e.value;
+}
+```
+
+```java
+final Node<K,V> getNode(int hash, Object key) {
+        Node<K,V>[] tab; Node<K,V> first, e; int n; K k;
+        if ((tab = table) != null && (n = tab.length) > 0 &&
+            (first = tab[(n - 1) & hash]) != null) {
+            // 表不为空，长度大于0，同时根据hash值计算在表中的地址
+            // 这里首先表可能为空，因为表只有在首次使用时才初始化！！
+            // 计算hash地址的方法为(n-1) & hash,保证结果在0--(n-1)
+            if (first.hash == hash && // always check first node
+                ((k = first.key) == key || (key != null && key.equals(k))))
+                return first;
+            // 判断是否是同一key，首先判断hash值是否一样，
+            // 其次判断是否是同一对象，最后判断是否equals
+            if ((e = first.next) != null) {
+                // 如果被树化，在树中查找 
+                if (first instanceof TreeNode)
+                    return ((TreeNode<K,V>)first).getTreeNode(hash, key);
+                // 链表中查找
+                do {
+                    if (e.hash == hash &&
+                        ((k = e.key) == key || (key != null && key.equals(k))))
+                        return e;
+                } while ((e = e.next) != null);
+            }
+        }
+        return null;
+    }
+```
+
+树节点中查找元素
+```java
+final TreeNode<K,V> getTreeNode(int h, Object k) {
+            return ((parent != null) ? root() : this).find(h, k, null);
+            // 当前节点是根节点，直接find
+            // 否则根据parent搜索到根节点，然后查找
+        }
+```
+
+```java
+// kc: 如果key实现了Comparable<C>接口，kc即为C代表的类
+final TreeNode<K,V> find(int h, Object k, Class<?> kc) {
+            TreeNode<K,V> p = this; // 以当前节点为根的子树中查找
+            do {
+                int ph, dir; K pk;
+                TreeNode<K,V> pl = p.left, pr = p.right, q;
+                if ((ph = p.hash) > h)
+                    p = pl; // 当前hash值大于目标hash值，沿左树搜索
+                else if (ph < h)
+                    p = pr; // 当前hash值小于目标hash值，沿右树搜索
+                else if ((pk = p.key) == k || (k != null && k.equals(pk)))
+                    return p; // hash值相等，并且key为同一对象，或者equals，则找到目标
+                else if (pl == null)
+                    p = pr; // hash值相等，左树为空，只能沿右树搜索
+                else if (pr == null)
+                    p = pl;; // hash值相等，右树为空，只能沿左树搜索
+                else if ((kc != null ||
+                          (kc = comparableClassFor(k)) != null) &&
+                         (dir = compareComparables(kc, k, pk)) != 0)
+                     // 有前提条件，pl与pr都不为null
+                    // kc != null 表明已经知道key实现了Comparable<C>，并且kc为C
+                    // kc = comparableClassFor(k)) != null 否则搜索key是否实现了Comparable<C>
+                    // 在key实现Comparable<C>的情况下
+                    // 比较k与当前pk若不等，判断是向左树搜索还是向右树搜索
+                    p = (dir < 0) ? pl : pr;
+                else if ((q = pr.find(h, k, kc)) != null)
+                    // 在无法判断需要向哪棵子树搜索时
+                    // 先搜索右子树，如果找到结果返回
+                    return q;
+                else
+                // 右树无法搜索到结果，沿左子树搜索
+                    p = pl;
+            } while (p != null);
+            return null;
+        }
+```
+
+### put
+
+```java
+// 在hashmap中将key与value关联起来，如果key已经存在，替换旧的value
+public V put(K key, V value) {
+        return putVal(hash(key), key, value, false, true);
+    }
+```
+
+```java
+// onlyIfAbsent为true时，不改变已存在的值
+// evict如果为false，表示hash表处于创建模式
+final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
+                   boolean evict) {
+        Node<K,V>[] tab; Node<K,V> p; int n, i;
+        if ((tab = table) == null || (n = tab.length) == 0)
+           // 表为空，或者表为一个空数组
+           n = (tab = resize()).length;
+        if ((p = tab[i = (n - 1) & hash]) == null)
+            // 当前桶位置没有存放元素
+            tab[i] = newNode(hash, key, value, null);
+        else {
+            Node<K,V> e; K k;
+            if (p.hash == hash &&
+                ((k = p.key) == key || (key != null && key.equals(k))))
+                e = p; // key已存在且为头节点
+            else if (p instanceof TreeNode)
+                e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
+            else {
+                for (int binCount = 0; ; ++binCount) {
+                    if ((e = p.next) == null) {
+                        // 找到插入位置
+                        p.next = newNode(hash, key, value, null);
+                        if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st
+                            treeifyBin(tab, hash);  // 链表长度过大，需要树化
+                        break;
+                    }
+                    if (e.hash == hash &&
+                        ((k = e.key) == key || (key != null && key.equals(k))))
+                        // 找到已存在的key
+                        break;
+                    p = e;
+                }
+            }
+            if (e != null) { // existing mapping for key
+                V oldValue = e.value;
+                if (!onlyIfAbsent || oldValue == null)
+                    e.value = value;
+                afterNodeAccess(e); // LinkedHashMap中使用的hook方法
+                return oldValue;
+            }
+        }
+        ++modCount; // 增加了一个新的key，map结构改变，计数加一
+        if (++size > threshold)
+            resize();  // 扩容
+        afterNodeInsertion(evict);
+        return null;
+    }
+```
+
+```java
+// 初始化，或者双倍扩展table
+// 构造时，初始时有两种情况
+// 1.可能旧表为null，旧阈值为0 HashMap() 
+// 2.可能旧表为null，旧阈值为2的幂  HashMap(int initialCapacity, float loadFactor)
+// 情况1，表容量初始设置为缺省容量16
+// 情况2，表容量设置为旧阈值，为2的幂
+// 保证了一开始的表容量为2的幂，每次扩容又扩大一倍仍为2的幂
+// 所以最大的容量只会扩展到1 << 30,即最大表容量，再扩一倍数值溢出
+final Node<K,V>[] resize() {
+        Node<K,V>[] oldTab = table;
+        // 计算旧表容量
+        int oldCap = (oldTab == null) ? 0 : oldTab.length;
+        int oldThr = threshold;
+        int newCap, newThr = 0;
+        if (oldCap > 0) {
+            if (oldCap >= MAXIMUM_CAPACITY) {
+                // 如果旧表容量已经达到最大容量了
+                // 返回旧表
+                threshold = Integer.MAX_VALUE;
+                return oldTab;
+            }
+            // 如何保证新表容量不超过最大容量的???
+            else if ((newCap = oldCap << 1) < MAXIMUM_CAPACITY &&
+                     oldCap >= DEFAULT_INITIAL_CAPACITY)
+                 // 新表容量为旧表容量两倍，并且旧表容量超过缺省容量16
+                 // 新阈值为旧阈值的两倍
+                 // 因为阈值等于容量与负载因子的乘积，如果容量扩充一倍，
+                 // 阈值也扩充一倍
+                newThr = oldThr << 1; // double threshold
+        }
+        else if (oldThr > 0) // initial capacity was placed in threshold
+            // HashMap(int initialCapacity, float loadFactor)
+            // 使用此构造函数，初始时表没有创建，旧表容量为0
+            // 但是旧阈值不为零
+            newCap = oldThr;
+        else {               // zero initial threshold signifies using defaults
+            // 旧表容量为0，旧表阈值为0
+            // HashMap() 此构造函数，初始时表未创建，阈值没有设置
+            // 所有新表容量为缺省容量
+            // 新阈值为容量与负载因子的乘积
+            newCap = DEFAULT_INITIAL_CAPACITY;
+            newThr = (int)(DEFAULT_LOAD_FACTOR * DEFAULT_INITIAL_CAPACITY);
+        }
+        if (newThr == 0) {
+            //  上方条件语句设置了新容量，可能新阈值没有设置
+            float ft = (float)newCap * loadFactor;
+            newThr = (newCap < MAXIMUM_CAPACITY && ft < (float)MAXIMUM_CAPACITY ?
+                      (int)ft : Integer.MAX_VALUE);
+        }
+        threshold = newThr;
+        @SuppressWarnings({"rawtypes","unchecked"})
+            Node<K,V>[] newTab = (Node<K,V>[])new Node[newCap];
+        table = newTab;
+        if (oldTab != null) {
+            for (int j = 0; j < oldCap; ++j) {
+                Node<K,V> e;
+                if ((e = oldTab[j]) != null) {
+                    oldTab[j] = null;
+                    if (e.next == null)
+                        newTab[e.hash & (newCap - 1)] = e;
+                    else if (e instanceof TreeNode)
+                        ((TreeNode<K,V>)e).split(this, newTab, j, oldCap);
+                    else { // preserve order
+                        Node<K,V> loHead = null, loTail = null;
+                        Node<K,V> hiHead = null, hiTail = null;
+                        Node<K,V> next;
+                        // 元素在新表中的索引要么保持一样，要么偏移一个旧表的容量
+                        // 因为容量为2的幂确定的(why)???
+                        // 由于容量cap总是2的幂设为2^n，所有容量表示为2进制后，
+                        // 第n+1位为1，其余位都为0
+                        // 如cap =  64 = 2^6 ---> 100 0000
+                        // 则容量减一表示为二进制后，1到n-1位为1，其余位为0，如
+                        // cap-1 = 63  ---> 011 1111
+                        // 所有(cap-1) & hash，表示取hash值的低n-1位作为索引
+                        // 扩容之后容量加倍，newcap = 2 ^ (n+1)
+                        // 计算得到的新索引为hash值的低n位，
+                        // 若第n位为0，那么新索引idxN与原索引idxO相同,即 idxN = idxO
+                        // 若第n位为1，那么有 idxN = idxO | 100 0000 (注，第n位为1)
+                        // 相当于idxN = idxO + (2^n == oldcap)
+                        do {
+                            next = e.next;
+                            // 节点在新表中的索引与原表相同
+                            // 通过上面的分析，即第n位为0
+                            if ((e.hash & oldCap) == 0) {
+                                // 如果尾节点为null，链表开始构造
+                                // 保存当前节点为头节点
+                                if (loTail == null)
+                                    loHead = e;
+                                else
+                                    // 在尾节点之后插入 
+                                    loTail.next = e;
+                                // 移动尾节点到新的节点
+                                loTail = e;
+                            }
+                            // 否则在新表中的索引偏移一个旧表的容量
+                            else {
+                                if (hiTail == null)
+                                    hiHead = e;
+                                else
+                                    hiTail.next = e;
+                                hiTail = e;
+                            }
+                        } while ((e = next) != null);
+                        if (loTail != null) {
+                            loTail.next = null;
+                            newTab[j] = loHead;
+                        }
+                        if (hiTail != null) {
+                            hiTail.next = null;
+                            newTab[j + oldCap] = hiHead;
+                        }
+                    }
+                }
+            }
+        }
+        return newTab;
+    }
+```
+
+```java
+// tab 新表， index 旧索引， bit 旧容量
+final void split(HashMap<K,V> map, Node<K,V>[] tab, int index, int bit) {
+            TreeNode<K,V> b = this;
+            // Relink into lo and hi lists, preserving order
+            // lo低位链表，维持原来的索引，
+            // hi高位链表，维持原索引偏移一个量
+            TreeNode<K,V> loHead = null, loTail = null;
+            TreeNode<K,V> hiHead = null, hiTail = null;
+            int lc = 0, hc = 0; // 每个链表的计数
+            for (TreeNode<K,V> e = b, next; e != null; e = next) {
+                next = (TreeNode<K,V>)e.next;
+                e.next = null;
+                if ((e.hash & bit) == 0) {
+                    if ((e.prev = loTail) == null)
+                        loHead = e;
+                    else
+                        loTail.next = e;
+                    loTail = e;
+                    ++lc;
+                }
+                else {
+                    if ((e.prev = hiTail) == null)
+                        hiHead = e;
+                    else
+                        hiTail.next = e;
+                    hiTail = e;
+                    ++hc;
+                }
+            }
+
+            if (loHead != null) {
+                if (lc <= UNTREEIFY_THRESHOLD)
+                    // 链表太小，非树化
+                    tab[index] = loHead.untreeify(map);
+                else {
+                    tab[index] = loHead;
+                    if (hiHead != null) // (else is already treeified)
+                        // hiHead == null，表明所有的节点都维持了原来的索引，已经被树化了
+                        loHead.treeify(tab);
+                }
+            }
+            if (hiHead != null) {
+                if (hc <= UNTREEIFY_THRESHOLD)
+                    tab[index + bit] = hiHead.untreeify(map);
+                else {
+                    tab[index + bit] = hiHead;
+                    if (loHead != null)
+                        hiHead.treeify(tab);
+                }
+            }
+        }
+```
+
+## remove
+
+```java
+// matchValue 为true时只在value与找到的节点的value equal时才移出节点
+// movable为false时移出时不移动其他节点
+final Node<K,V> removeNode(int hash, Object key, Object value,
+                               boolean matchValue, boolean movable) {
+        Node<K,V>[] tab; Node<K,V> p; int n, index;
+        if ((tab = table) != null && (n = tab.length) > 0 &&
+            (p = tab[index = (n - 1) & hash]) != null) {
+            Node<K,V> node = null, e; K k; V v;
+            if (p.hash == hash &&
+                ((k = p.key) == key || (key != null && key.equals(k))))
+                node = p;
+            else if ((e = p.next) != null) {
+                if (p instanceof TreeNode)
+                    node = ((TreeNode<K,V>)p).getTreeNode(hash, key);
+                else {
+                    do {
+                        if (e.hash == hash &&
+                            ((k = e.key) == key ||
+                             (key != null && key.equals(k)))) {
+                            node = e;
+                            break;
+                        }
+                        p = e;
+                    } while ((e = e.next) != null);
+                }
+            }
+            if (node != null && (!matchValue || (v = node.value) == value ||
+                                 (value != null && value.equals(v)))) {
+                if (node instanceof TreeNode)
+                    ((TreeNode<K,V>)node).removeTreeNode(this, tab, movable);
+                else if (node == p)
+                    // 第一个元素匹配
+                    tab[index] = node.next;
+                else
+                    // 移出了node节点
+                    p.next = node.next;
+                ++modCount;
+                --size;
+                afterNodeRemoval(node);
+                return node;
+            }
+        }
+        return null;
+    }
+```
+
+**注：**对于红黑树的操作没有分析，复杂度太大
+
+## 参考
+
+[Java HashMap中在resize()时候的rehash,即再哈希法的理解](https://blog.csdn.net/qq_27093465/article/details/52270519)<br>
